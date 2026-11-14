@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hande</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="auth" id="auth" hidden></div>
+  <div class="app" id="app" hidden>
+    <aside class="sidebar" id="sidebar"></aside>
+    <main class="main" id="main"></main>
+  </div>
+
+  <dialog id="task-dialog" class="dialog">
+    <form method="dialog" id="task-form">
+      <h2 id="task-dialog-title">할 일</h2>
+      <label>제목
+        <input name="title" required maxlength="120" autocomplete="off">
+      </label>
+      <div class="row">
+        <label>담당자
+          <select name="assigneeId"></select>
+        </label>
+        <label>마감일
+          <input name="due" type="date">
+        </label>
+      </div>
+      <label>상태
+        <select name="status">
+          <option value="todo">요청</option>
+          <option value="doing">진행 중</option>
+          <option value="done">완료</option>
+        </select>
+      </label>
+      <p class="origin" id="task-origin" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn danger" data-action="task-delete" id="task-delete">삭제</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-action="task-cancel">취소</button>
+        <button type="submit" class="btn primary">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script src="vendor/supabase.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "hande",
+  "version": "0.1.0",
+  "private": true,
+  "description": "대화에서 요청한 일이 바로 할 일이 되는 팀 협업 앱 (웹 + Tauri 데스크톱)",
+  "scripts": {
+    "web": "python3 -m http.server 4173 --directory web",
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}
