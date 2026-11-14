@@ -25,7 +25,7 @@ const avatar = (m, sm) => `<span class="avatar${sm ? ' sm' : ''}" style="backgro
 
 /* ---------- server ---------- */
 // Supabase: login (Auth), data (Postgres + row-level security) and live updates (Realtime).
-const cfg = window.HANDE_CONFIG || {};
+const cfg = window.ELPA_CONFIG || {};
 const sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey);
 
 const ERRORS = [
@@ -172,7 +172,7 @@ function markRead(channelId) {
 }
 function syncBadge() {
   const total = state ? state.channels.reduce((n, c) => n + unread(c.id), 0) : 0;
-  document.title = total ? `(${total}) Hande` : 'Hande';
+  document.title = total ? `(${total}) ELPA` : 'ELPA';
   native('set_unread', { count: total });
 }
 
@@ -197,7 +197,7 @@ function renderAuth() {
   const join = ui.teamMode === 'join';
   $('#auth').innerHTML = `
     <form class="auth-card" id="auth-form">
-      <div class="brand"><span class="brand-mark">✓</span>Hande</div>
+      <div class="brand"><span class="brand-mark">✓</span>ELPA</div>
       <p class="sub">${team ? '마지막 단계예요. 이름과 팀을 정해 주세요.' : '대화에서 요청한 일이 바로 할 일이 됩니다.'}</p>
       ${team ? '' : `<div class="tabs">
         <button type="button" data-action="auth-mode" data-id="login" aria-pressed="${!signup}">로그인</button>
@@ -236,7 +236,7 @@ function renderSidebar() {
   }).join('');
   const me = member(state.me);
   $('#sidebar').innerHTML = `
-    <div class="brand"><span class="brand-mark">✓</span>Hande</div>
+    <div class="brand"><span class="brand-mark">✓</span>ELPA</div>
     <div class="nav-label"><span>대화</span><button data-action="channel-add" aria-label="대화방 추가" title="대화방 추가">+</button></div>
     ${channels}
     ${ui.addingChannel ? '<input class="channel-new" id="channel-new" placeholder="대화방 이름 입력 후 Enter" maxlength="30" aria-label="새 대화방 이름">' : ''}

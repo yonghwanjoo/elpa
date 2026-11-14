@@ -1,5 +1,5 @@
 {
-  "name": "hande",
+  "name": "elpa",
   "version": "0.1.0",
   "private": true,
   "description": "대화에서 요청한 일이 바로 할 일이 되는 팀 협업 앱 (웹 + Tauri 데스크톱)",

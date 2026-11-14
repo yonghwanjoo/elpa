@@ -26,9 +26,9 @@ fn set_unread(app: AppHandle, count: i64) {
         let title = if unread > 0 { Some(unread.to_string()) } else { None };
         let _ = tray.set_title(title.as_deref());
         let tooltip = if unread > 0 {
-            format!("Hande · 안 읽은 메시지 {unread}개")
+            format!("ELPA · 안 읽은 메시지 {unread}개")
         } else {
-            "Hande".to_string()
+            "ELPA".to_string()
         };
         let _ = tray.set_tooltip(Some(tooltip.as_str()));
     }
@@ -53,13 +53,13 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![set_unread, notify])
         .setup(|app| {
-            let open = MenuItem::with_id(app, "open", "Hande 열기", true, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", "ELPA 열기", true, None::<&str>)?;
             let quick = MenuItem::with_id(app, "quick-add", "새 할 일", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "종료", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &quick, &quit])?;
 
             let mut tray = TrayIconBuilder::with_id(TRAY_ID)
-                .tooltip("Hande")
+                .tooltip("ELPA")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "open" => show_main(app),
@@ -84,7 +84,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to build the Hande desktop app");
+        .expect("failed to build the ELPA desktop app");
 
     app.run(|_app, _event| {
         // Clicking the dock icon brings the hidden window back.

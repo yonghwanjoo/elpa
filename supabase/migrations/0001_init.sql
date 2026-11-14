@@ -1,4 +1,4 @@
--- Hande: schema, row-level security and server-side functions.
+-- ELPA: schema, row-level security and server-side functions.
 -- Every row belongs to a team; a signed-in user can only reach rows of their own team.
 
 create schema if not exists private;
