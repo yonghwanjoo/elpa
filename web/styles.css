@@ -126,6 +126,20 @@ input, select, textarea { border: 1px solid var(--line); background: var(--surfa
 .due { flex: none; color: var(--muted); font-size: 12px; }
 .due.late { color: var(--warn); font-weight: 600; }
 
+.atts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-top: 6px; }
+.att-img { border: 1px solid var(--line); border-radius: 8px; padding: 0; background: var(--bg); overflow: hidden; line-height: 0; max-width: 100%; }
+.att-img img { display: block; max-width: 280px; max-height: 200px; min-width: 80px; min-height: 60px; object-fit: cover; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.att-file { display: grid; gap: 1px; text-align: left; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 8px 12px; max-width: 280px; }
+.att-img:hover, .att-file:hover { border-color: var(--accent); }
+.att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.att-size { color: var(--muted); font-size: 12px; }
+.pending { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 20px; }
+.pending:not(:empty) { padding-top: 10px; border-top: 1px solid var(--line); }
+.pending:not(:empty) + .composer { border-top: 0; padding-top: 8px; }
+.pending-file { display: inline-flex; align-items: center; gap: 8px; max-width: 260px; padding: 4px 4px 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.pending-file button { border: 0; background: none; color: var(--muted); border-radius: 4px; width: 22px; height: 22px; font-size: 16px; line-height: 1; flex: none; }
+.pending-file button:hover { background: var(--hover); color: var(--ink); }
+.btn.attach { flex: none; width: 40px; height: 40px; padding: 0; font-size: 18px; color: var(--muted); }
 .composer { display: flex; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--line); }
 .composer textarea { flex: 1; resize: none; height: 40px; max-height: 140px; padding: 9px 12px; }
 

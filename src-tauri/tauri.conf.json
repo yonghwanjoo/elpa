@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost https://*.supabase.co wss://*.supabase.co"
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.supabase.co; connect-src ipc: http://ipc.localhost https://*.supabase.co wss://*.supabase.co"
     }
   },
   "bundle": {

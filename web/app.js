@@ -17,6 +17,11 @@ let state = null; // latest snapshot from GET /api/state
 const ui = { view: 'chat', channelId: null, renderedChannel: null, noteId: null, mineOnly: false, addingChannel: false, dialog: null, flashId: null, authMode: 'login', teamMode: 'new' };
 let noteDraft = null; // unsaved note edit: { id, title, body, timer }
 let stream = null;
+let pending = []; // files picked for the next message, not uploaded yet
+const imageUrls = new Map(); // attachment path -> promise of a temporary signed URL
+const MAX_FILES = 5;
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const INLINE_IMAGES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 
 const member = (id) => state.members.find((m) => m.id === id) || { id, name: '알 수 없음', color: '#888' };
 const task = (id) => state.tasks.find((t) => t.id === id);
@@ -49,7 +54,20 @@ async function call(query) {
 const server = {
   state: () => call(sb.rpc('get_state')),
   joinTeam: (name, teamName, inviteCode) => call(sb.rpc('join_team', { p_name: name, p_team_name: teamName || '', p_invite_code: inviteCode || '' })),
-  post: (channelId, text) => call(sb.from('messages').insert({ channel_id: channelId, text })),
+  post: (channelId, text, attachments) => call(sb.from('messages').insert({ channel_id: channelId, text, attachments: attachments || [] })),
+  // Files live in a private bucket under "<team id>/<random>.<ext>"; the original name is kept on the message.
+  upload: async (file) => {
+    const ext = (file.name.match(/\.([A-Za-z0-9]{1,8})$/) || [])[1];
+    const path = `${state.team.id}/${crypto.randomUUID()}${ext ? `.${ext.toLowerCase()}` : ''}`;
+    const { error } = await sb.storage.from('attachments').upload(path, file, { contentType: file.type || 'application/octet-stream' });
+    if (error) throw new Error(explain(error));
+    return { path, name: file.name.slice(0, 200), size: file.size, type: (file.type || '').slice(0, 100) };
+  },
+  signedUrl: async (path, downloadName) => {
+    const { data, error } = await sb.storage.from('attachments').createSignedUrl(path, 3600, downloadName ? { download: downloadName } : undefined);
+    if (error) throw new Error(explain(error));
+    return data.signedUrl;
+  },
   addChannel: (name) => call(sb.from('channels').insert({ name }).select('id').single()),
   createTask: (f) => call(sb.rpc('create_task', { p_title: f.title, p_assignee: f.assigneeId, p_due: f.due || '', p_status: f.status || 'todo', p_message_id: f.messageId || null })),
   updateTask: (id, f) => call(sb.rpc('update_task', { p_id: id, p_title: f.title ?? null, p_assignee: f.assigneeId ?? null, p_due: f.due ?? null, p_status: f.status ?? null })),
@@ -148,7 +166,7 @@ function announce(prev, next) {
     if (seen.has(m.id) || m.system || m.authorId === next.me) continue;
     if (watching && ui.view === 'chat' && ui.channelId === m.channelId) continue;
     const c = channel(m.channelId);
-    notify(`${member(m.authorId).name} · # ${c ? c.name : ''}`, m.text.slice(0, 120));
+    notify(`${member(m.authorId).name} · # ${c ? c.name : ''}`, m.text.slice(0, 120) || '파일을 보냈어요');
   }
   const old = new Map(prev.tasks.map((t) => [t.id, t]));
   for (const t of next.tasks) {
@@ -257,6 +275,43 @@ function taskChip(t) {
     <span class="pill ${t.status}">${STATUS[t.status]}</span><span class="t">${esc(t.title)}</span>${avatar(member(t.assigneeId), true)}${dueLabel(t)}</button>`;
 }
 
+/* ---------- attachments ---------- */
+function fileSize(bytes) {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+function attachmentsHtml(m) {
+  const list = m.attachments || [];
+  if (!list.length) return '';
+  return `<div class="atts">${list.map((a) => (INLINE_IMAGES.includes(a.type)
+    ? `<button class="att-img" data-action="att-open" data-path="${esc(a.path)}" title="${esc(a.name)} · 눌러서 크게 보기"><img alt="${esc(a.name)}" data-img="${esc(a.path)}"></button>`
+    : `<button class="att-file" data-action="att-open" data-path="${esc(a.path)}" data-name="${esc(a.name)}"><span class="att-name">${esc(a.name)}</span><span class="att-size">${fileSize(a.size)} · 내려받기</span></button>`)).join('')}</div>`;
+}
+// Images sit in a private bucket: fetch a short-lived link for each one on screen.
+function loadImages() {
+  document.querySelectorAll('img[data-img]:not([src])').forEach((img) => {
+    const path = img.dataset.img;
+    if (!imageUrls.has(path)) imageUrls.set(path, server.signedUrl(path).catch(() => { imageUrls.delete(path); return null; }));
+    imageUrls.get(path).then((url) => { if (url) img.src = url; else img.alt = '이미지를 불러오지 못했어요'; });
+  });
+}
+function renderPending() {
+  const box = $('#pending');
+  if (!box) return;
+  box.innerHTML = pending.map((f, i) => `<span class="pending-file"><span class="att-name">${esc(f.name)}</span><span class="att-size">${fileSize(f.size)}</span>
+    <button type="button" data-action="att-remove" data-id="${i}" aria-label="${esc(f.name)} 첨부 취소">×</button></span>`).join('');
+}
+function addFiles(files) {
+  for (const f of files) {
+    if (pending.length >= MAX_FILES) { toast('파일은 한 번에 5개까지예요', '나머지는 다음 메시지로 보내 주세요.'); break; }
+    if (f.size > MAX_FILE_BYTES) { toast('파일이 너무 커요', `${f.name}: 한 개에 20MB까지 보낼 수 있어요.`); continue; }
+    if (!f.size) continue;
+    pending.push(f);
+  }
+  renderPending();
+}
+
 function renderChat(scroll) {
   const c = channel(ui.channelId);
   if (!c) { $('#main').innerHTML = '<p class="empty">대화방이 없어요.</p>'; return; }
@@ -272,15 +327,20 @@ function renderChat(scroll) {
     const t = m.taskId && task(m.taskId);
     return `${sep}<div class="msg${ui.flashId === m.id ? ' flash' : ''}" id="m-${m.id}">${avatar(a)}
       <div class="msg-body"><div class="msg-meta"><b>${esc(a.name)}</b><time>${timeFmt.format(d)}</time></div>
-        <div class="msg-text">${esc(m.text)}</div>${t ? taskChip(t) : ''}</div>
+        ${m.text ? `<div class="msg-text">${esc(m.text)}</div>` : ''}${attachmentsHtml(m)}${t ? taskChip(t) : ''}</div>
       ${t ? '' : `<div class="msg-tools"><button class="btn" data-action="task-from-msg" data-id="${m.id}">할 일로 만들기</button></div>`}</div>`;
   }).join('');
   $('#main').innerHTML = `
     <header class="head"><h1># ${esc(c.name)}</h1><span class="sub">멤버 ${state.members.length}명</span></header>
     <div class="messages" id="messages">${body || '<p class="empty">아직 메시지가 없어요. 첫 메시지를 남겨보세요.</p>'}</div>
+    <div class="pending" id="pending"></div>
     <form class="composer" id="composer-form">
+      <button class="btn attach" type="button" data-action="att-pick" aria-label="파일 첨부" title="파일 첨부 (끌어다 놓아도 돼요)">＋</button>
+      <input type="file" id="file-input" multiple hidden>
       <textarea id="composer" placeholder="${esc(c.name)}에 메시지 보내기 (Enter로 전송, Shift+Enter로 줄바꿈)" aria-label="메시지 입력" maxlength="4000"></textarea>
       <button class="btn primary" type="submit">보내기</button></form>`;
+  renderPending();
+  loadImages();
   const list = $('#messages');
   const target = ui.flashId && document.getElementById(`m-${ui.flashId}`);
   if (target) target.scrollIntoView({ block: 'center' });
@@ -387,7 +447,7 @@ function openTaskDialog(opts) {
   const originEl = $('#task-origin');
   originEl.hidden = !origin;
   if (origin) {
-    originEl.innerHTML = `${esc(member(origin.authorId).name)}: “${esc(origin.text.slice(0, 90))}”${t ? ` <button type="button" data-action="task-jump" data-id="${origin.id}">대화에서 보기</button>` : ''}`;
+    originEl.innerHTML = `${esc(member(origin.authorId).name)}: “${esc((origin.text || (origin.attachments[0] || {}).name || '').slice(0, 90))}”${t ? ` <button type="button" data-action="task-jump" data-id="${origin.id}">대화에서 보기</button>` : ''}`;
   }
   if (!dlg.open) dlg.showModal();
   form.elements.title.focus();
@@ -417,7 +477,22 @@ document.addEventListener('click', async (e) => {
     case 'channel-add': ui.addingChannel = !ui.addingChannel; renderSidebar(); if (ui.addingChannel) $('#channel-new').focus(); break;
     case 'task-from-msg': {
       const m = state.messages.find((x) => x.id === id);
-      openTaskDialog({ messageId: m.id, title: m.text.replace(/\s+/g, ' ').slice(0, 80) });
+      openTaskDialog({ messageId: m.id, title: (m.text || (m.attachments[0] || {}).name || '').replace(/\s+/g, ' ').slice(0, 80) });
+      break;
+    }
+    case 'att-pick': $('#file-input').click(); break;
+    case 'att-remove': pending.splice(Number(id), 1); renderPending(); break;
+    case 'att-open': {
+      // Open the tab first (inside the click) so the browser does not block it as a pop-up.
+      const tab = tauri ? null : window.open('about:blank', '_blank');
+      try {
+        const url = await server.signedUrl(el.dataset.path, el.dataset.name);
+        if (tab) tab.location = url;
+        else { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click(); }
+      } catch (err) {
+        if (tab) tab.close();
+        toast('파일을 열지 못했어요', err.message);
+      }
       break;
     }
     case 'task-new': openTaskDialog({}); break;
@@ -479,12 +554,23 @@ document.addEventListener('submit', async (e) => {
     e.preventDefault();
     const box = $('#composer');
     const text = box.value.trim();
-    if (!text) return;
+    const files = pending;
+    if (!text && !files.length) return;
     box.value = '';
+    pending = [];
+    renderPending();
     const channelId = ui.channelId;
-    const sent = await act(() => server.post(channelId, text));
-    if (!sent && $('#composer') && !$('#composer').value) $('#composer').value = text; // give the text back on failure
-    else if ($('#messages')) $('#messages').scrollTop = $('#messages').scrollHeight;
+    if (files.length) toast('파일을 올리는 중이에요', `${files.length}개`);
+    const sent = await act(async () => {
+      const attachments = [];
+      for (const f of files) attachments.push(await server.upload(f));
+      return server.post(channelId, text, attachments);
+    });
+    if (!sent) { // give the text and files back on failure
+      if ($('#composer') && !$('#composer').value) $('#composer').value = text;
+      pending = files.concat(pending).slice(0, MAX_FILES);
+      renderPending();
+    } else if ($('#messages')) $('#messages').scrollTop = $('#messages').scrollHeight;
   } else if (form.id === 'quick-add') {
     e.preventDefault();
     const input = form.elements.title;
@@ -536,7 +622,20 @@ document.addEventListener('input', (e) => {
   $('#note-list').innerHTML = noteListHtml();
 });
 
+/* attach files: picker, paste, or drop onto the chat */
+const hasFiles = (e) => !dragId && ui.view === 'chat' && state && e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+document.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+document.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  addFiles(e.dataTransfer.files);
+});
+document.addEventListener('paste', (e) => {
+  if (e.target.id === 'composer' && e.clipboardData && e.clipboardData.files.length) { e.preventDefault(); addFiles(e.clipboardData.files); }
+});
+
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'file-input') { addFiles(e.target.files); e.target.value = ''; return; }
   if (e.target.id === 'mine-only') { ui.mineOnly = e.target.checked; renderBoard(); }
 });
 
